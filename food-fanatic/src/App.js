@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import "./App.css";
 
 import "firebase/firestore";
@@ -9,11 +9,11 @@ import { useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
+import { getFirestore, collection, doc, getDocs, setDoc, query, onSnapshot } from "firebase/firestore";
 
 //Table imports
 import BootstrapTable from "react-bootstrap-table-next";
-import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
+import "bootstrap/dist/css/bootstrap.css";
 
 const config = require("./config.json");
 
@@ -23,36 +23,38 @@ initializeApp(config.firebaseConfig);
 const auth = getAuth();
 const firestore = getFirestore();
 
-var fdc = 0;
-
 function App() {
   const [user] = useAuthState(auth);
 
-  const [fdcid_input, setFdcid] = useState(" ");
-  const [recipe_nameInput, setRecipe_name] = useState(" ");
+  const ingredientID = useRef(null);
+  const recipeName = useRef(null);
 
-  const handle_fdcid = event => {
-    setFdcid(event.target.value);
-  };
-  
-  const handleRecipeName = event =>{
-    setRecipe_name(event.target.value);
-  };
-  fdc = fdcid_input;
-
-
-  return (
-    <div className="App">
-      <header className="App-header">Food Fanatic{user ? <SignOut /> : <SignIn />}</header>
-      <section>{user ? <Recipes /> : <p>Sign In to View Recipes</p>}</section>
-      <section>{user ? <Ingredients />: <p> </p>}</section>
-      <section>{user ? <input className = "e-input" type = "text" placeholder = "Enter Fdcid"/>: <p> </p>} </section>
-      <section>{user ? <input className = "e-input" type = "text" placeholder = "Enter name of Recipe" />: <p> </p>} </section>
-      <section>{user ?<button onClick ={AddRecipeToCloud}> Add New Recipe to list </button>: <p> </p>} </section>
-    </div>
-  );
+  if (user) {
+    return (
+      <div className="App">
+        <header className="App-header">Food Fanatic{user ? <SignOut /> : <SignIn />}</header>
+        <div className="container">
+          {/* <Recipes /> */}
+          <Ingredients />
+          <input className="e-input" type="text" placeholder="Enter Fdcid" ref={ingredientID} />
+          <button onClick={() => addIngredientToCloud(ingredientID)}> Add New Ingredient</button>
+          <br />
+          <input className="e-input" type="text" placeholder="Enter name of Recipe" ref={recipeName} />
+          <button onClick={() => addRecipeToCloud(recipeName)}> Add New Recipe</button>
+        </div>
+      </div>
+    );
+  } else {
+    return (
+      <div className="App">
+        <header className="App-header">
+          Food Fanatic <SignIn />
+        </header>
+        <p>Sign In to View Recipes</p>
+      </div>
+    );
+  }
 }
-
 
 function SignIn() {
   const signInWithGoogle = () => {
@@ -77,56 +79,76 @@ async function getRecipes() {
   return recipes;
 }
 
-const getIngredientData = async () => {
-  var foodId = 534358; // example food id for beans
-  var response = await fetch(`${config.fdcConfig.url}/${foodId}?limit=1&api_key=${config.fdcConfig.apiKey}`)
-  .then(response => response.json())
-  var jsonData = response;
-  return jsonData;
+const getUserIngredients = () => {
+  const q = query(collection(firestore, "users", auth.currentUser.uid, "ingredients"));
+  let ingredients = [];
+  const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    querySnapshot.forEach((doc) => {
+      // doc.data() is never undefined for query doc snapshots
+      let docData = doc.data();
+      ingredients.push({ id: doc.id, name: docData.name, cal: docData.cal });
+    });
+  });
+  return ingredients;
 };
 
-
-const AddRecipeToCloud = async () => {
+const getIngredientData = async (foodId) => {
+  let res = await fetch(`${config.fdcConfig.url}/${foodId}?limit=1&api_key=${config.fdcConfig.apiKey}`);
+  if (res.status !== 200) {
+    return { name: null, cal: null };
+  }
+  res = await res.json();
+  return res.labelNutrients
+    ? { name: res.description, cal: res.labelNutrients.calories.value }
+    : { name: res.description, cal: null };
 };
 
+const addRecipeToCloud = async () => {};
+
+const addIngredientToCloud = async (ingredientID) => {
+  let fdcID = ingredientID.current.value;
+  getIngredientData(fdcID).then((ingredientData) => {
+    if (ingredientData.name) {
+      setDoc(doc(firestore, "users", auth.currentUser.uid, "ingredients", fdcID), ingredientData);
+    }
+    else alert("Please enter a valid ingredient");
+  });
+  ingredientID.current.value = "";
+};
 
 function Ingredients() {
-  let [ingredients, setIngredients] = useState(null);
-  // need to find a way to limit the amount of fetches cleanly...can't overload
-  let [fetchingIngredients, setFetchingIngredients] = useState(null);
-  if (!fetchingIngredients) {
-    setFetchingIngredients(1);
-    getIngredientData().then((ingredients) => {
-      // trying out stuff with the API
-      getIngredientData().then((jsonData) => {console.log(jsonData)});
-      const ingredient_data = [{name: ingredients.description, class: ingredients.labelNutrients.calories.value}];
-      const ingredient_columns = [{dataField: 'name', text: 'Ingredient Name'},{dataField: 'class', text:'Calories (kcal)'}];
-      const ingredientTable = (
-        <div id="Ingredients">
-          <h1>Ingredients</h1>
-            <BootstrapTable keyField = 'name' data ={ingredient_data} columns = {ingredient_columns}/>
-        </div>
-      );
-      setIngredients(ingredientTable);
+
+  const q = query(collection(firestore, "users", auth.currentUser.uid, "ingredients"));
+  const [userIngredients, setUserIngredients] = useState([]);
+  const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    let ingredients = []
+    querySnapshot.forEach((doc) => {
+      // doc.data() is never undefined for query doc snapshots
+      let docData = doc.data();
+      ingredients.push({ id: doc.id, name: docData.name, cal: docData.cal });
     });
-  }
-  return ingredients;
+    setUserIngredients(ingredients);
+  });
+
+  const ingredient_columns = [
+    { dataField: "name", text: "Ingredient Name" },
+    { dataField: "cal", text: "Calories (kcal)" },
+  ];
+  const ingredientsTable = (
+    <div id="Ingredients">
+      <h1>Ingredients</h1>
+      <BootstrapTable keyField="name" data={userIngredients} columns={ingredient_columns} />
+    </div>
+  );
+  return ingredientsTable;
 }
-
-
-
-
-
 
 function Recipes() {
   let [recipes, setRecipes] = useState(null);
-  // need to find a way to limit the amount of fetches cleanly...can't overload
   let [fetchingRecipes, setFetchingRecipes] = useState(null);
   if (!fetchingRecipes) {
     setFetchingRecipes(1);
     getRecipes().then((recipes) => {
-      // trying out stuff with the API
-       //getIngredientData().then((jsonData) => {console.log(jsonData)});
       const recipesTable = (
         <div id="recipes">
           <h1>Your Recipes</h1>
