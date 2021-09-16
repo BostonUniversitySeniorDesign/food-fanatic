@@ -88,49 +88,25 @@ async function getRecipes() {
   return recipes;
 }
 
-const getUserIngredients = () => {
-  const q = query(collection(firestore, "users", auth.currentUser.uid, "ingredients"));
-  let ingredients = [];
-  const unsubscribe = onSnapshot(q, (querySnapshot) => {
-    querySnapshot.forEach((doc) => {
-      // doc.data() is never undefined for query doc snapshots
-      let docData = doc.data();
-      ingredients.push({ id: doc.id, name: docData.name, cal: docData.cal });
-    });
-  });
-  return ingredients;
-};
-
-const getIngredientData = async (foodId) => {
-  let res = await fetch(`${config.fdcConfig.url}/${foodId}?limit=1&api_key=${config.fdcConfig.apiKey}`);
-  if (res.status !== 200) {
-    return { name: null, cal: null };
-  }
-  res = await res.json();
-  return res.labelNutrients
-    ? { name: res.description, cal: res.labelNutrients.calories.value }
-    : { name: res.description, cal: null };
-};
-
 const addRecipeToCloud = async () => {};
 
 const addIngredientToCloud = async (ingredientID) => {
   let fdcID = ingredientID.current.value;
-  getIngredientData(fdcID).then((ingredientData) => {
-    if (ingredientData.name) {
-      setDoc(doc(firestore, "users", auth.currentUser.uid, "ingredients", fdcID), ingredientData);
-    }
-    else alert("Please enter a valid ingredient");
-  });
+  fetch(`/ingredient?fdcID=${fdcID}`)
+    .then((res) => res.json())
+    .then((ingredientData) => {
+      if (ingredientData.name) {
+        setDoc(doc(firestore, "users", auth.currentUser.uid, "ingredients", fdcID), ingredientData);
+      } else alert("Please enter a valid ingredient");
+    });
   ingredientID.current.value = "";
 };
 
 function Ingredients() {
-
   const q = query(collection(firestore, "users", auth.currentUser.uid, "ingredients"));
   const [userIngredients, setUserIngredients] = useState([]);
   const unsubscribe = onSnapshot(q, (querySnapshot) => {
-    let ingredients = []
+    let ingredients = [];
     querySnapshot.forEach((doc) => {
       // doc.data() is never undefined for query doc snapshots
       let docData = doc.data();
