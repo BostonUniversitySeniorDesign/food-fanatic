@@ -9,7 +9,7 @@ import { useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, doc, getDocs, setDoc, query, onSnapshot } from "firebase/firestore";
+import { getFirestore, collection, doc, getDocs, setDoc, query, onSnapshot, addDoc } from "firebase/firestore";
 
 //Table imports
 import BootstrapTable from "react-bootstrap-table-next";
@@ -22,6 +22,7 @@ initializeApp(config.firebaseConfig);
 
 const auth = getAuth();
 const firestore = getFirestore();
+const selectedIngredients = new Set();
 
 function App() {
   const [user] = useAuthState(auth);
@@ -42,7 +43,7 @@ function App() {
       <div className="App">
         <header className="App-header">Food Fanatic{user ? <SignOut /> : <SignIn />}</header>
         <div className="container">
-          {/* <Recipes /> */}
+          <Recipes />
           <Ingredients />
           <input className="e-input" type="text" placeholder="Enter Fdcid" ref={ingredientID} />
           <button onClick={() => addIngredientToCloud(ingredientID)}> Add New Ingredient</button>
@@ -59,7 +60,7 @@ function App() {
         <header className="App-header">
           Food Fanatic <SignIn />
         </header>
-        <p>Sign In to View Recipes</p>
+        <p>Sign In to View Recipes and Ingredients</p>
       </div>
     );
   }
@@ -88,7 +89,25 @@ async function getRecipes() {
   return recipes;
 }
 
-const addRecipeToCloud = async () => {};
+const addRecipeToCloud = async (recipeName) => {
+  if (!recipeName.current.value) {
+    alert("Please enter a valid recipe name");
+    return;
+  }
+  let totalCalories = 0;
+  let ingredients = [];
+  selectedIngredients.forEach((ingredient) => {
+    if (ingredient.cal) totalCalories += ingredient.cal;
+    ingredients.push(ingredient);
+  });
+  let recipeData = {
+    name: recipeName.current.value,
+    cal: totalCalories,
+    ingredients: ingredients,
+  };
+  if (selectedIngredients.size > 0) addDoc(collection(firestore, "users", auth.currentUser.uid, "recipes"), recipeData);
+  else alert("Please select ingredients to add to the recipe");
+};
 
 const addIngredientToCloud = async (ingredientID) => {
   let fdcID = ingredientID.current.value;
@@ -102,9 +121,42 @@ const addIngredientToCloud = async (ingredientID) => {
   ingredientID.current.value = "";
 };
 
+const makeIngredientsTable = (ingredients) => {
+  const ingredient_columns = [
+    { dataField: "name", text: "Ingredient Name" },
+    { dataField: "cal", text: "Calories (kcal)" },
+  ];
+
+  const handleRowSelect = (row, isSelected, e) => {
+    if (isSelected) {
+      selectedIngredients.add(row);
+    } else {
+      selectedIngredients.forEach((ingredient) => {
+        if (ingredient.id === row.id) selectedIngredients.delete(ingredient);
+      });
+    }
+    console.log(selectedIngredients);
+  };
+
+  const selectRowProp = {
+    mode: "checkbox",
+    onSelect: handleRowSelect,
+    hideSelectColumn: true,
+    clickToSelect: true,
+    bgColor: "rgb(238, 193, 213)",
+  };
+
+  const ingredientsTable = (
+    <div id="Ingredients">
+      <BootstrapTable selectRow={selectRowProp} keyField="name" data={ingredients} columns={ingredient_columns} />
+    </div>
+  );
+  return ingredientsTable;
+};
+
 function Ingredients() {
-  const q = query(collection(firestore, "users", auth.currentUser.uid, "ingredients"));
   const [userIngredients, setUserIngredients] = useState([]);
+  const q = query(collection(firestore, "users", auth.currentUser.uid, "ingredients"));
   const unsubscribe = onSnapshot(q, (querySnapshot) => {
     let ingredients = [];
     querySnapshot.forEach((doc) => {
@@ -114,51 +166,53 @@ function Ingredients() {
     });
     setUserIngredients(ingredients);
   });
-
-  const ingredient_columns = [
-    { dataField: "name", text: "Ingredient Name" },
-    { dataField: "cal", text: "Calories (kcal)" },
-  ];
-  const ingredientsTable = (
-    <div id="Ingredients">
+  return (
+    <div>
       <h1>Ingredients</h1>
-      <BootstrapTable keyField="name" data={userIngredients} columns={ingredient_columns} />
+      {makeIngredientsTable(userIngredients)}
     </div>
   );
-  return ingredientsTable;
 }
 
 function Recipes() {
-  let [recipes, setRecipes] = useState(null);
-  let [fetchingRecipes, setFetchingRecipes] = useState(null);
-  if (!fetchingRecipes) {
-    setFetchingRecipes(1);
-    getRecipes().then((recipes) => {
-      const recipesTable = (
-        <div id="recipes">
-          <h1>Your Recipes</h1>
-          <table id="recipesTable">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Calories</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recipes.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.data.name}</td>
-                  <td>{item.data.cal}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-      setRecipes(recipesTable);
+  const q = query(collection(firestore, "users", auth.currentUser.uid, "recipes"));
+  const [userRecipes, setUserRecipes] = useState([]);
+  const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    let recipes = [];
+    querySnapshot.forEach((doc) => {
+      // doc.data() is never undefined for query doc snapshots
+      let docData = doc.data();
+      recipes.push({ id: doc.id, name: docData.name, cal: docData.cal, ingredients: docData.ingredients });
     });
-  }
-  return recipes;
+    setUserRecipes(recipes);
+  });
+
+  const recipesColumns = [
+    { dataField: "name", text: "Recipe Name" },
+    { dataField: "cal", text: "Total Calories (kcal)" },
+  ];
+
+  const expandRow = {
+    renderer: (row) => makeIngredientsTable(row.ingredients),
+  };
+
+  const options = {
+    expandRowBgColor: "rgb(242, 255, 163)",
+  };
+
+  const recipesTable = (
+    <div id="Recipes">
+      <h1>Recipes</h1>
+      <BootstrapTable
+        options={options}
+        expandRow={expandRow}
+        keyField="name"
+        data={userRecipes}
+        columns={recipesColumns}
+      />
+    </div>
+  );
+  return recipesTable;
 }
 
 export default App;
