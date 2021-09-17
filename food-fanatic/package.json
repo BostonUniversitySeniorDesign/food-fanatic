@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "express": "^4.17.1",
-    "node-fetch": "^3.0.0"
+    "node-fetch": "^3.0.0",
+    "react-webcam-barcode-scanner": "0.0.2-rc2"
   }
 }
