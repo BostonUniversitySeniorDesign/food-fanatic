@@ -8,7 +8,21 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 
 const getIngredientData = (foodId, cb) => {
-  https.get(`${config.fdcConfig.url}/${foodId}?limit=1&api_key=${config.fdcConfig.apiKey}`, (resp) => {
+  https.get(`${config.fdcConfig.url}api_key=${config.fdcConfig.apiKey}&query=${foodId}`, (resp) => {
+    let data = '';
+    resp.on('data', (chunk) => {
+      data += chunk;
+    })
+    resp.on('end', () => {
+      return cb(JSON.parse(data));
+    });
+  }).on('error', (e) => {
+    return { name: null, cal: null };
+  });
+};
+
+const getIngredientData2 = (fdcId, cb) => {
+  https.get(`${config.fdcConfig.url2}/${fdcId}?limit=1&api_key=${config.fdcConfig.apiKey}`, (resp) => {
     let data = '';
     resp.on('data', (chunk) => {
       data += chunk;
@@ -32,12 +46,14 @@ app.get("/ingredient", (req, res) => {
     res.status(400).json({ name: null, cal: null });
     return;
   }
-  getIngredientData(foodId, (ingredientData) => {
-    ingName = ingredientData.description;
-    calories = ingredientData.labelNutrients ? ingredientData.labelNutrients.calories.value : null;
-    if (ingName) {
-      res.json({name: ingName, cal: calories});
-    } else res.status(400).json({ name: null, cal: null });
+  getIngredientData(foodId, (searchData) =>{
+    getIngredientData2(searchData, (ingredientData) => {
+      ingName = ingredientData.description;
+      calories = ingredientData.labelNutrients ? ingredientData.labelNutrients.calories.value : null;
+      if (ingName) {
+        res.json({name: ingName, cal: calories});
+      } else res.status(400).json({ name: null, cal: null });
+    });
   });
 });
 
