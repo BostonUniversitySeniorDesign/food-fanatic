@@ -15,6 +15,9 @@ import { getFirestore, collection, doc, getDocs, setDoc, query, onSnapshot, addD
 import BootstrapTable from "react-bootstrap-table-next";
 import "bootstrap/dist/css/bootstrap.css";
 
+//Camera import
+import BarcodeScannerComponent from 'react-webcam-barcode-scanner';
+
 const config = require("./config.json");
 
 // find in firebase ... will set up secrets later
@@ -31,6 +34,7 @@ function App() {
   const recipeName = useRef(null);
 
   const [data, setData] = React.useState(null);
+  const [bardata, setBarData] = React.useState('Not Found');
 
   React.useEffect(() => {
     fetch("/api")
@@ -46,10 +50,14 @@ function App() {
           <Recipes />
           <Ingredients />
           <input className="e-input" type="text" placeholder="Enter Fdcid" ref={ingredientID} />
-          <button onClick={() => addIngredientToCloud(ingredientID)}> Add New Ingredient</button>
-          <br />
           <input className="e-input" type="text" placeholder="Enter name of Recipe" ref={recipeName} />
           <button onClick={() => addRecipeToCloud(recipeName)}> Add New Recipe</button>
+          <br />
+          <BarcodeScannerComponent width={500} height={500} onUpdate={(err, result) => {
+          if (result) setBarData((result.text).slice(1,13)) }} />
+          <p> Ingredient UPC: {bardata} </p>
+          <button onClick={() => addIngredientToCloud(bardata)}> Add New Ingredient</button>
+          <br />
           <p>{!data ? "Loading..." : data}</p>
         </div>
       </div>
@@ -109,8 +117,8 @@ const addRecipeToCloud = async (recipeName) => {
   else alert("Please select ingredients to add to the recipe");
 };
 
-const addIngredientToCloud = async (ingredientID) => {
-  let fdcID = ingredientID.current.value;
+const addIngredientToCloud = async (fdcID) => {
+  //let fdcID = ingredientID.current.value;
   fetch(`/ingredient?fdcID=${fdcID}`)
     .then((res) => res.json())
     .then((ingredientData) => {
@@ -118,7 +126,7 @@ const addIngredientToCloud = async (ingredientID) => {
         setDoc(doc(firestore, "users", auth.currentUser.uid, "ingredients", fdcID), ingredientData);
       } else alert("Please enter a valid ingredient");
     });
-  ingredientID.current.value = "";
+  //ingredientID.current.value = "";
 };
 
 const makeIngredientsTable = (ingredients) => {
