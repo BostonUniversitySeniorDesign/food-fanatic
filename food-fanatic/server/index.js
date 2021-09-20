@@ -13,6 +13,7 @@ const UPCtoFdcID = (foodId, cb) => {
     resp.on('data', (chunk) => {
       data += chunk;
     })
+    console.log(resp);
     resp.on('end', () => {
       return cb(JSON.parse(data));
     });
@@ -40,12 +41,13 @@ app.get("/api", (req, res) => {
 });
 
 app.get("/ingredient", (req, res) => {
-  foodId = req.query.fdcID;
+  var foodId = req.query.fdcID;
   console.log(`Fetching ingredient ${foodId}`);
   if (!foodId) {
     res.status(400).json({ name: null, cal: null });
     return;
   }
+
   UPCtoFdcID(foodId, (searchData) =>{
     FdcIDtoCalories(searchData, (ingredientData) => {
       ingName = ingredientData.description;
