@@ -37,7 +37,7 @@ The frontend displays the ingredients and recipes that the user has added. You c
 
 ![Landing Page after Signing in](images/landing.png)
 
-##Youtube Link:
+* **Youtube Link:**
 https://youtu.be/EMj4i927zFU
 *Note Turn down volume when playing as I didn't realize the mic was on full blast until after it was published...
 
