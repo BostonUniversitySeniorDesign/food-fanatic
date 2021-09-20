@@ -49,7 +49,6 @@ function App() {
         <div className="container">
           <Recipes />
           <Ingredients />
-          <input className="e-input" type="text" placeholder="Enter Fdcid" ref={ingredientID} />
           <input className="e-input" type="text" placeholder="Enter name of Recipe" ref={recipeName} />
           <button onClick={() => addRecipeToCloud(recipeName)}> Add New Recipe</button>
           <br />
@@ -57,6 +56,9 @@ function App() {
           if (result) setBarData((result.text).slice(1,13)) }} />
           <p> Ingredient UPC: {bardata} </p>
           <button onClick={() => addIngredientToCloud(bardata)}> Add New Ingredient</button>
+          <br />
+          <p> Not Scanning? Enter UPC Manuallly Below: </p>
+          <input className="e-input" type="text" placeholder="Enter UPC" onChange = {event => setBarData(event.target.value)} />
           <br />
           <p>{!data ? "Loading..." : data}</p>
         </div>
@@ -117,15 +119,23 @@ const addRecipeToCloud = async (recipeName) => {
   else alert("Please select ingredients to add to the recipe");
 };
 
-const addIngredientToCloud = async (fdcID) => {
-  //let fdcID = ingredientID.current.value;
-  fetch(`/ingredient?fdcID=${fdcID}`)
-    .then((res) => res.json())
-    .then((ingredientData) => {
-      if (ingredientData.name) {
-        setDoc(doc(firestore, "users", auth.currentUser.uid, "ingredients", fdcID), ingredientData);
-      } else alert("Please enter a valid ingredient");
-    });
+const addIngredientToCloud = async (upcID) => {
+  //let fdcaID = 45001529;
+  let res = await fetch(`${config.fdcConfig.url}api_key=${config.fdcConfig.apiKey}&query=${upcID}`);
+  if (res.status !== 200){
+    return null;
+  }
+  res = await res.json();
+  let resFDCID = await fetch(`${config.fdcConfig.url2}/${res.foods[0].fdcId}?limit=1&api_key=${config.fdcConfig.apiKey}`);
+  if (resFDCID.status !== 200){
+    return null;
+  }
+  resFDCID = await resFDCID.json();
+  var ingredientData = {name: resFDCID.description, cal: resFDCID.labelNutrients.calories.value};
+  console.log(ingredientData);
+    if (ingredientData.name) {
+      setDoc(doc(firestore, "users", auth.currentUser.uid, "ingredients", upcID), ingredientData);
+    } else alert("Please enter a valid ingredient");
   //ingredientID.current.value = "";
 };
 
